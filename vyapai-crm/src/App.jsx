@@ -61,9 +61,9 @@ const SIMILAR_ITEMS = [
 ];
 
 function Avatar({name,size=38}){
-  const ini=name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  const ini=(name||"?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
   const cols=[C.p1,C.g1,C.o1,C.pk1];
-  const idx=name.charCodeAt(0)%cols.length;
+  const idx=(name?.charCodeAt(0)||0)%cols.length;
   return <div style={{width:size,height:size,borderRadius:"50%",background:`linear-gradient(135deg,${cols[idx]},${cols[(idx+1)%cols.length]})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:size*0.35,flexShrink:0}}>{ini}</div>;
 }
 
@@ -154,7 +154,20 @@ function Dashboard({customers,invoices,account,onNav}){
     </div>
 
     {/* Metric Grid */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+    <GlowCard style={{marginBottom:16}}>
+      <div style={{fontWeight:700,fontSize:14,color:C.txt,marginBottom:12,fontFamily:"Poppins"}}>🚩 Aaj ka Day-Book / Today's Ledger</div>
+      {invoices.filter(i => i.date === new Date().toISOString().split('T')[0]).length === 0 ? 
+        <div style={{fontSize:11,color:C.txt2,textAlign:"center",padding:10}}>Aaj koi transactions nahi hain.</div> :
+        invoices.filter(i => i.date === new Date().toISOString().split('T')[0]).map(i => (
+          <div key={i.invoice_id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,color:C.txt}}>{i.customer_name}</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.g1}}>{INR(i.paid)}</div>
+          </div>
+        ))
+      }
+    </GlowCard>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
       <MetricCard label="Customers" labelHi="ग्राहक" value={activeC} sub="Active" color={C.pM} icon="👥" onClick={() => onNav("customers")}/>
       <MetricCard label="Unpaid" labelHi="बकाया" value={invoices.filter(i=>i.status==="Unpaid").length} sub="Invoices" color={C.r1} icon="🧾" onClick={() => onNav("invoices")}/>
       <MetricCard label="Total Sales" labelHi="कुल बिक्री" value={INR(totalSales)} sub="This month" color={C.g1} icon="📈" onClick={() => onNav("reports")}/>
@@ -231,7 +244,7 @@ function Dashboard({customers,invoices,account,onNav}){
         <div key={inv.invoice_id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
           <Avatar name={inv.customer_name} size={32}/>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.txt,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inv.customer_name}</div>
+            <div style={{fontWeight:700,fontSize:13,color:C.txt,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inv.customer_name}</div>
             <div style={{fontSize:10,color:C.txt2}}>{inv.invoice_id} • {inv.date}</div>
           </div>
           <div style={{textAlign:"right"}}>
@@ -378,33 +391,40 @@ function DiaryAI(){
         bodyPayload={
           model:"claude-sonnet-4-20250514",
           max_tokens:1500,
-          system:`You are a Hinglish CRM diary analyzer for Indian small businesses. 
-Analyze the given diary data and return ONLY valid JSON in this exact format:
-{"transactions":[{"type":"SALE"|"PURCHASE"|"EXPENSE","label":"string","amount":number}],"total_sale":number,"total_purchase":number,"total_expense":number,"profit_loss":number,"summary_hindi":"2-4 line summary in simple Hindi","action_steps":["step1","step2","step3","step4","step5"]}`,
-          messages:[{role:"user",content:"Demo diary: Sabzi bikri ₹2800, Mandi kharid ₹1700, Thela kiraya ₹200, Chai-paani ₹150, Helper ₹350. Analyze karke JSON do."}]
+          messages: [
+            {
+              role: "system",
+              content: "You are a Hinglish CRM diary analyzer. Analyze the diary data and return valid JSON."
+            },
+            {
+              role: "user",
+              content: "Demo diary: Sabzi bikri ₹2800, Mandi kharid ₹1700, Thela kiraya ₹200, Chai-paani ₹150, Helper ₹350."
+            }
+          ]
         };
       }else{
         bodyPayload={
           model:"claude-sonnet-4-20250514",
           max_tokens:1500,
-          system:`You are a Hinglish CRM diary analyzer for Indian small businesses.
-Look at the handwritten diary image carefully. Extract all transactions (sales, purchases, expenses).
-Return ONLY valid JSON:
-{"transactions":[{"type":"SALE"|"PURCHASE"|"EXPENSE","label":"string","amount":number}],"total_sale":number,"total_purchase":number,"total_expense":number,"profit_loss":number,"summary_hindi":"2-4 line Hindi summary","action_steps":["5 Hindi action steps for next day"]}`,
-          messages:[{role:"user",content:[
-            {type:"image",source:{type:"base64",media_type:"image/jpeg",data:imageB64}},
-            {type:"text",text:"Is diary page mein likhe sabhi transactions padhkar JSON format mein do."}
-          ]}]
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Look at the handwritten diary image carefully. Extract all transactions (sales, purchases, expenses). Return ONLY valid JSON: {\"transactions\":[{\"type\":\"SALE\"|\"PURCHASE\"|\"EXPENSE\",\"label\":\"string\",\"amount\":number}],\"total_sale\":number,\"total_purchase\":number,\"total_expense\":number,\"profit_loss\":number,\"summary_hindi\":\"2-4 line Hindi summary\",\"action_steps\":[\"5 actions\"]}" },
+                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageB64}` } }
+              ]
+            }
+          ]
         };
       }
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(bodyPayload)
+      const { data: edgeData, error } = await supabase.functions.invoke('vyapai-ai', {
+        body: bodyPayload
       });
-      const data=await res.json();
-      const text=data.content?.[0]?.text||"{}";
-      const clean=text.replace(/```json|```/g,"").trim();
-      const parsed=JSON.parse(clean);
+      const data = edgeData;
+      const text = data?.choices?.[0]?.message?.content || "{}";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      if (parsed.error) throw new Error("AI Error");
       setResult(parsed);
       if(isDemo)setOcrText("Sabzi bikri ₹2800\nMandi kharid ₹1700\nThela kiraya ₹200\nChai-paani ₹150\nHelper ₹350");
     }catch(err){
@@ -454,11 +474,13 @@ Return ONLY valid JSON:
       </button>
     </div>
 
-    {loading&&<div style={{textAlign:"center",padding:20,color:C.txt2}}>
-      <div style={{fontSize:24,marginBottom:8}}>🔍</div>
-      <div style={{fontSize:13,fontWeight:600}}>OCR + AI Analysis chal rahi hai...</div>
-      <div style={{fontSize:10,marginTop:4,opacity:0.7}}>Handwriting padhi ja rahi hai</div>
-    </div>}
+    {loading && (
+      <div style={{textAlign:"center",padding:20,color:C.txt2}}>
+        <div style={{fontSize:24,marginBottom:8}}>🔍</div>
+        <div style={{fontSize:13,fontWeight:600}}>OCR + AI Analysis chal rahi hai...</div>
+        <div style={{fontSize:10,marginTop:4,opacity:0.7}}>Handwriting padhi ja rahi hai</div>
+      </div>
+    )}
 
     {result&&!loading&&<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
@@ -500,72 +522,92 @@ Return ONLY valid JSON:
 }
 
 // ─── REPORTS ─────────────────────────────────────────────
-function Reports({invoices}){
-  const aging=[
-    {label:"0-30 दिन",amt:12500,color:C.g1,pct:49},
-    {label:"31-60 दिन",amt:8200,color:C.o1,pct:32},
-    {label:"60+ दिन",amt:5000,color:C.r1,pct:19},
+function Reports({invoices, customers}){
+  const today = new Date();
+  
+  // Calculate Aging (Real Data)
+  const overdueInvs = invoices.filter(inv => inv.status !== "Paid");
+  const aging = [
+    { label: "0-15 दिन", amt: 0, color: C.g1, pct: 0 },
+    { label: "16-30 दिन", amt: 0, color: C.o1, pct: 0 },
+    { label: "30+ दिन", amt: 0, color: C.r1, pct: 0 }
   ];
 
-  const nextDayActions=[
-    "Sharma Electronics ko payment reminder bhejein — ₹15,200 overdue hai 10 din se।",
-    "Basmati Rice ka naya stock order karein — 2 din mein khatam hoga।",
-    "Moong Dal ko shelf pe aage rakhein — demand zyada, margin bhi achha hai।",
-    "3 naye customers se follow-up karein jo pichle hafte mila tha।",
-    "Aaj ki collection ₹5,000 Gupta Store se confirm karein aur receipt send karein।",
+  let totalOverdue = 0;
+  let gstCollected = 0;
+  let totalSalesAmt = 0;
+
+  invoices.forEach(inv => {
+    totalSalesAmt += inv.total_amount;
+    gstCollected += (inv.total_amount * 0.18) / 1.18; // Reverse GST 18%
+  });
+
+  overdueInvs.forEach(inv => {
+    const diff = (today - new Date(inv.date)) / (1000 * 60 * 60 * 24);
+    const due = inv.total_amount - inv.paid;
+    totalOverdue += due;
+    if (diff <= 15) aging[0].amt += due;
+    else if (diff <= 30) aging[1].amt += due;
+    else aging[2].amt += due;
+  });
+
+  if (totalOverdue > 0) {
+    aging.forEach(a => a.pct = Math.round((a.amt / totalOverdue) * 100));
+  }
+
+  // Top Invoices by Amount
+  const topInvoices = [...invoices].sort((a,b) => b.total_amount - a.total_amount).slice(0, 5);
+
+  // Mock data for nextDayActions, as it's not provided in the original context
+  const nextDayActions = [
+    "Pending payments collect karein.",
+    "Naye customers ko follow up karein.",
+    "Stock check karein aur order place karein.",
+    "Marketing ke liye naye ideas sochein.",
+    "Business expenses review karein."
   ];
 
   return <div>
-    {/* Top Items */}
-    <GlowCard style={{marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:13,color:C.txt,marginBottom:12,fontFamily:"Poppins"}}>
-        🏆 Most Sold Items <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ सबसे ज्यादा बिकने वाले</span>
-      </div>
-      {TOP_ITEMS.map((item,i)=>(
-        <div key={item.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
-          <div style={{width:24,height:24,borderRadius:"50%",background:`linear-gradient(135deg,#2C4FE8,#4B6FFF)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700,flexShrink:0}}>{i+1}</div>
-          <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.txt}}>{item.name}</div>
-            <div style={{fontSize:10,color:C.txt2}}>{item.sales} units • {INR(item.revenue)}</div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <span style={{background:`linear-gradient(135deg,#4B6FFF,#38BDF8)`,backgroundClip:"text",WebkitBackgroundClip:"text",color:"transparent",fontSize:12,fontWeight:700}}>{item.trend}</span>
-          </div>
-        </div>
-      ))}
-    </GlowCard>
+    {/* GST & Profit Report */}
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16}}>
+      <MetricCard label="GST Collected" labelHi="जीएसटी (अनुमानित)" value={INR(Math.round(gstCollected))} color={C.b1} icon="🧾"/>
+      <MetricCard label="Net Profit" labelHi="शुद्ध मुनाफा (Est)" value={INR(Math.round(totalSalesAmt * 0.15))} color={C.g1} icon="💹"/>
+    </div>
 
-    {/* Similar High-Sale Items */}
+    {/* Dynamic Aging Report */}
     <GlowCard style={{marginBottom:14}}>
       <div style={{fontWeight:700,fontSize:13,color:C.txt,marginBottom:12,fontFamily:"Poppins"}}>
-        💡 Similar High-Sale Items <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ मिलते-जुलते आइटम</span>
+        📊 True Receivables Aging <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ असली बकाया उम्र</span>
       </div>
-      {SIMILAR_ITEMS.map(item=>(
-        <div key={item.name} style={{background:"rgba(75,111,255,0.1)",borderRadius:10,padding:"10px 12px",marginBottom:8,border:`1px solid ${C.border}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:12,fontWeight:700,color:C.txt}}>{item.name}</div>
-              <div style={{fontSize:10,color:C.txt2,marginTop:2}}>{item.gap} • {item.sales} units sold</div>
-            </div>
-            <div style={{background:C.gL,color:C.g2,borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:700}}>{item.potential}</div>
-          </div>
-        </div>
-      ))}
-    </GlowCard>
-
-    {/* Receivables Aging */}
-    <GlowCard style={{marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:13,color:C.txt,marginBottom:12,fontFamily:"Poppins"}}>
-        📊 Receivables Aging <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ बकाया उम्र</span>
-      </div>
+      <div style={{fontSize:18,fontWeight:900,color:C.r1,marginBottom:16}}>{INR(totalOverdue)} <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>Total Outstanding</span></div>
       {aging.map(a=>(
         <div key={a.label} style={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
             <span style={{fontSize:11,color:C.txt}}>{a.label}</span>
             <span style={{fontSize:11,fontWeight:700,color:a.color}}>{INR(a.amt)} ({a.pct}%)</span>
           </div>
-          <div style={{height:6,background:"rgba(255,255,255,0.08)",borderRadius:4}}>
-            <div style={{height:6,background:a.color,borderRadius:4,width:`${a.pct}%`,transition:"width 0.5s"}}/>
+          <div style={{height:10,background:"rgba(255,255,255,0.08)",borderRadius:5,overflow:"hidden"}}>
+            <div style={{height:"100%",background:a.color,width:`${a.pct}%`,transition:"width 1s",boxShadow:`0 0 10px ${a.color}44`}}/>
+          </div>
+        </div>
+      ))}
+    </GlowCard>
+
+    {/* Top Invoices (Real Data) */}
+    <GlowCard style={{marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,color:C.txt,marginBottom:12,fontFamily:"Poppins"}}>
+        📈 Largest Invoices <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ सबसे बड़े बिल</span>
+      </div>
+      {topInvoices.map((inv,i)=>(
+        <div key={inv.invoice_id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{width:24,height:24,borderRadius:"50%",background:`linear-gradient(135deg,#2C4FE8,#4B6FFF)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700,flexShrink:0}}>{i+1}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.txt}}>{inv.customer_name}</div>
+            <div style={{fontSize:10,color:C.txt2}}>{inv.date} • {inv.invoice_id}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.txt}}>{INR(inv.total_amount)}</div>
+            <Badge status={inv.status}/>
           </div>
         </div>
       ))}
@@ -574,7 +616,7 @@ function Reports({invoices}){
     {/* 5 Action Points */}
     <GlowCard style={{marginBottom:14,background:"rgba(5,150,105,0.08)"}}>
       <div style={{fontWeight:700,fontSize:13,color:"#6ee7b7",marginBottom:12,fontFamily:"Poppins"}}>
-        ✅ Kal ke 5 Action Points <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ कल के 5 काम</span>
+        ✅ Active Worklist <span style={{fontSize:10,color:C.txt2,fontWeight:400}}>/ कल के 5 काम</span>
       </div>
       {nextDayActions.map((a,i)=>(
         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:10}}>
@@ -646,6 +688,29 @@ YOUR ROLE:
 JSON actions when needed:
 {"action":"GET_BALANCE|ADD_CUSTOMER|CREATE_INVOICE|ADD_PAYMENT|ANALYZE_BUSINESS","parameters":{...},"reply":"..."}`;
 
+  const [isListening,setIsListening]=useState(false);
+  
+  const startVoice=()=>{
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SpeechRecognition)return alert("Browser voice support nahi hai.");
+    const rec=new SpeechRecognition();
+    rec.lang="hi-IN"; // Support for Hindi/Hinglish
+    rec.onstart=()=>setIsListening(true);
+    rec.onend=()=>setIsListening(false);
+    rec.onresult=e=>{
+      const t=e.results[0][0].transcript;
+      setInput(t);
+    };
+    rec.start();
+  };
+
+  const speak=t=>{
+    const s=window.speechSynthesis;
+    const ut=new SpeechSynthesisUtterance(t);
+    ut.lang="hi-IN";
+    s.speak(ut);
+  };
+
   const send=async()=>{
     if(!input.trim()||loading)return;
     const userMsg=input.trim();
@@ -653,22 +718,23 @@ JSON actions when needed:
     setMessages(m=>[...m,{role:"user",text:userMsg}]);
     setLoading(true);
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",max_tokens:1000,
-          system:systemPrompt,
-          messages:[
-            ...messages.slice(-8).map(m=>({role:m.role,content:m.text})),
-            {role:"user",content:userMsg}
+      const { data: edgeData, error } = await supabase.functions.invoke('vyapai-ai', {
+        body: {
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages.slice(-8).map(m => ({ role: m.role, content: m.text })),
+            { role: "user", content: userMsg }
           ]
-        })
+        }
       });
-      const data=await res.json();
-      const text=data.content?.[0]?.text||"Kuch error aa gaya, dobara try karein.";
+      const data = edgeData;
+      const text = data?.choices?.[0]?.message?.content || data?.error || "AI Service currently unavailable.";
       setMessages(m=>[...m,{role:"assistant",text}]);
-    }catch{
-      setMessages(m=>[...m,{role:"assistant",text:"Network error. Please try again."}]);
+      speak(text); 
+    }catch(err){
+      const errTxt="Service is momentarily down. Please try again later.";
+      setMessages(m=>[...m,{role:"assistant",text:errTxt}]);
+      speak(errTxt);
     }
     setLoading(false);
   };
@@ -712,18 +778,77 @@ JSON actions when needed:
       ))}
     </div>
 
-    <div style={{padding:"10px",background:C.card,borderTop:`1px solid ${C.border}`,display:"flex",gap:8}}>
+    <div style={{padding:"8px 12px",background:C.card,borderTop:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center"}}>
+      <button onClick={startVoice} 
+        style={{width:42,height:42,borderRadius:"50%",background:isListening?C.r1:C.p1,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:isListening?`0 0 15px ${C.r1}`:"none",transition:"all 0.3s"}}>
+        <span style={{fontSize:20,color:"#fff"}}>{isListening?"🛑":"🎤"}</span>
+      </button>
       <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
-        placeholder="Kuch bhi poochho... (Hinglish mein)"
-        style={{flex:1,padding:"10px 14px",borderRadius:22,border:`1px solid ${C.border}`,fontSize:12,outline:"none",background:C.bg3,color:C.txt,fontFamily:"Poppins"}}/>
-      <button onClick={send} disabled={loading} style={{width:40,height:40,borderRadius:"50%",background:loading?"#1a2040":`linear-gradient(135deg,#2C4FE8,#4B6FFF)`,border:"none",cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#fff"}}>
-        ➤
+        placeholder={isListening?"Boliye... / Listening...":"Poochhein... (Hinglish)"}
+        style={{flex:1,padding:"10px 16px",borderRadius:24,border:`1px solid ${C.border}`,fontSize:13,outline:"none",background:C.bg3,color:C.txt,fontFamily:"Poppins"}}/>
+      <button onClick={send} disabled={loading} 
+        style={{width:42,height:42,borderRadius:"50%",background:loading?"#1a2040":`linear-gradient(135deg,#2C4FE8,#4B6FFF)`,border:"none",cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff"}}>
+        🚀
       </button>
     </div>
   </div>;
 }
 
-// ─── ACCOUNT ─────────────────────────────────────────────
+// ─── PRODUCTS (Accounting & Inventory) ─────────────────────
+function Products({products, onAdd}){
+  const [q,setQ]=useState("");
+  const [showAdd,setShowAdd]=useState(false);
+  const [form,setForm]=useState({name:"",price:0,stock:0,category:""});
+
+  const filtered=products.filter(p=>(p.name||"").toLowerCase().includes(q.toLowerCase()));
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:14,color:C.txt,fontFamily:"Poppins"}}>माल की सूची / Inventory</div>
+      <button onClick={()=>setShowAdd(true)} style={{padding:"6px 14px",borderRadius:8,background:`linear-gradient(135deg,#2C4FE8,#4B6FFF)`,color:"#fff",border:"none",cursor:"pointer",fontSize:13,fontWeight:700}}>
+        + Item जोड़ें
+      </button>
+    </div>
+
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Item search karein..."
+      style={{width:"100%",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",color:C.txt,fontSize:13,outline:"none",marginBottom:14}}/>
+
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {filtered.map(p=>(
+        <GlowCard key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:C.txt}}>{p.name}</div>
+            <div style={{fontSize:10,color:C.txt2,marginTop:2}}>{p.category || "General"} • {INR(p.price)}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:11,color:C.txt2}}>Stock</div>
+            <div style={{fontSize:14,fontWeight:900,color:p.stock < 10 ? C.r1 : C.g1}}>{p.stock}</div>
+          </div>
+        </GlowCard>
+      ))}
+    </div>
+
+    {showAdd && <div style={{position:"fixed",inset:0,background:"rgba(7,11,26,0.9)",zIndex:1000,display:"flex",alignItems:"flex-end"}}>
+      <div style={{background:C.bg2,width:"100%",padding:20,borderRadius:"24px 24px 0 0",borderTop:`2px solid ${C.p1}`}}>
+        <div style={{fontWeight:800,fontSize:18,color:C.txt,marginBottom:20,fontFamily:"Poppins"}}>Naya Item Jodein / Add Product</div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <input placeholder="Item Name" style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,padding:12,color:"#fff"}} 
+            onChange={e=>setForm({...form,name:e.target.value})}/>
+          <div style={{display:"flex",gap:10}}>
+            <input placeholder="Price" type="number" style={{flex:1,background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,padding:12,color:"#fff"}}
+              onChange={e=>setForm({...form,price:Number(e.target.value)})}/>
+            <input placeholder="Stock" type="number" style={{flex:1,background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,padding:12,color:"#fff"}}
+              onChange={e=>setForm({...form,stock:Number(e.target.value)})}/>
+          </div>
+          <button onClick={()=>{onAdd(form);setShowAdd(false);}} style={{background:`linear-gradient(135deg,#00C48C,#00A374)`,padding:14,borderRadius:12,color:"#fff",fontWeight:800,border:"none",marginTop:10}}>
+            Item Save Karein
+          </button>
+          <button onClick={()=>setShowAdd(false)} style={{background:"transparent",color:C.txt2,padding:10,border:`1px solid ${C.border}`,borderRadius:12}}>Cancel</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
 function Account({account,setAccount}){
   const [edit,setEdit]=useState(false);
   const [form,setForm]=useState(account);
@@ -791,8 +916,9 @@ function Account({account,setAccount}){
 // ─── NAV CONFIG ──────────────────────────────────────────
 const NAV=[
   {id:"dashboard",label:"Home",labelHi:"होम",icon:"🏠",grad:["#4B6FFF","#89A4FF"]},
-  {id:"customers",label:"Customers",labelHi:"ग्राहक",icon:"👥",grad:["#38BDF8","#0EA5E9"]},
-  {id:"invoices",label:"Invoice",labelHi:"बिल",icon:"🧾",grad:["#00C48C","#00A374"]},
+    {id:"customers",label:"Customers",labelHi:"ग्राहक",icon:"👥",grad:[C.p1,C.p2]},
+    {id:"products",label:"Products",labelHi:"सामान",icon:"📦",grad:[C.b1,C.b2]},
+    {id:"invoices",label:"Invoices",labelHi:"बिल",icon:"🧾",grad:[C.o1,C.o2]},
   {id:"diary",label:"Diary AI",labelHi:"डायरी",icon:"📒",grad:["#F5C518","#D4A800"]},
   {id:"reports",label:"Reports",labelHi:"रिपोर्ट",icon:"📊",grad:["#7B9FFF","#4B6FFF"]},
   {id:"chat",label:"AI Chat",labelHi:"चैट",icon:"🤖",grad:["#4B6FFF","#38BDF8"]},
@@ -915,9 +1041,10 @@ export default function App(){
       <div style={{flex:1,overflowY:tab==="chat"?"hidden":"auto",padding:tab==="chat"?0:"14px 12px",display:"flex",flexDirection:"column"}}>
         {tab==="dashboard"&&<Dashboard customers={customers} invoices={invoices} account={account} onNav={setTab}/>}
         {tab==="customers"&&<Customers customers={customers} onAdd={addCustomer}/>}
+        {tab==="products"&&<Products products={products} onAdd={addProduct}/>}
         {tab==="invoices"&&<Invoices invoices={invoices} customers={customers} onAdd={addInvoice}/>}
         {tab==="diary"&&<DiaryAI/>}
-        {tab==="reports"&&<Reports invoices={invoices}/>}
+        {tab==="reports"&&<Reports invoices={invoices} customers={customers}/>}
         {tab==="chat"&&<div style={{flex:1,height:"calc(100vh - 118px)"}}><AIChat customers={customers} invoices={invoices} account={account}/></div>}
         {tab==="account"&&<Account account={account} setAccount={updateAccount}/>}
       </div>
