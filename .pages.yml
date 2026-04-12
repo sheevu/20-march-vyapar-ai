@@ -1,0 +1,54 @@
+site_name: Vyapar AI - 20 March
+site_description: AI-powered financial management and business automation platform
+site_url: https://sheevu.github.io/20-march-vyapar-ai/
+repo_url: https://github.com/sheevu/20-march-vyapar-ai
+repo_name: 20-march-vyapar-ai
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Configuration: getting-started/configuration.md
+  - Features:
+    - Overview: features/overview.md
+    - Financial Management: features/financial-management.md
+    - AI Integration: features/ai-integration.md
+    - Automation: features/automation.md
+  - User Guide:
+    - Dashboard: user-guide/dashboard.md
+    - Reports: user-guide/reports.md
+    - Settings: user-guide/settings.md
+  - API Documentation:
+    - Reference: api/reference.md
+    - Examples: api/examples.md
+    - Authentication: api/authentication.md
+  - FAQs: faqs.md
+  - About: about.md
+
+theme:
+  name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
+  palette:
+    - scheme: light
+      primary: indigo
+      accent: blue
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - minify
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tasklist
+  - toc:
+      permalink: true
